@@ -24,8 +24,6 @@
 #define EVENT_VALUE_MAX_SIZE 16
 #endif
 
-#define EVNET_RECORDER_USING_FLASHDB
-
 struct event_source {
     uint8_t id;
     const char *name;
@@ -49,14 +47,14 @@ static struct rt_mutex locker;
 static bool is_init = false, is_recording = false, is_replaing = false;
 static rt_tick_t last_trigger_tick = 0, repaly_start = 0, replay_setting_duration = 0;
 
-#ifdef EVNET_RECORDER_USING_FLASHDB
+#ifdef EVENT_RECORDER_USING_FLASHDB
 #include <flashdb.h>
 /* TSDB object */
 struct fdb_tsdb tsdb = { 0 };
 #define TSDB_TSL_LEN    1024
 #define TSDB_SEC        4096
 #define TSDB_SIZE       (TSDB_SEC * 4)
-#endif /* EVNET_RECORDER_USING_FLASHDB */
+#endif /* EVENT_RECORDER_USING_FLASHDB */
 
 #define LOCK()   rt_mutex_take(&locker, RT_WAITING_FOREVER)
 #define UNLOCK() rt_mutex_release(&locker)
@@ -85,7 +83,7 @@ static fdb_time_t get_time(void)
     return ++counts;
 }
 
-#ifdef EVNET_RECORDER_USING_FLASHDB
+#ifdef EVENT_RECORDER_USING_FLASHDB
 static int open_tsdb(const char *dir, const char *name)
 {
     bool file_mode = true;
@@ -102,7 +100,7 @@ static int open_tsdb(const char *dir, const char *name)
     }
     return 0;
 }
-#endif /* EVNET_RECORDER_USING_FLASHDB */
+#endif /* EVENT_RECORDER_USING_FLASHDB */
 
 int event_recorder_start(const char *dir, const char *name)
 {
@@ -113,13 +111,13 @@ int event_recorder_start(const char *dir, const char *name)
     LOCK();
     if (!is_recording)
     {
-#ifdef EVNET_RECORDER_USING_FLASHDB
+#ifdef EVENT_RECORDER_USING_FLASHDB
         if (open_tsdb(dir, name) != 0)
         {
             result = -1;
         }
         else
-#endif /* EVNET_RECORDER_USING_FLASHDB */
+#endif /* EVENT_RECORDER_USING_FLASHDB */
         {
             is_recording = true;
         }
@@ -142,10 +140,10 @@ int event_recorder_stop(void)
     {
         is_recording = false;
         last_trigger_tick = 0;
-#ifdef EVNET_RECORDER_USING_FLASHDB
+#ifdef EVENT_RECORDER_USING_FLASHDB
         /* close database */
         fdb_tsdb_deinit(&tsdb);
-#endif /* EVNET_RECORDER_USING_FLASHDB */
+#endif /* EVENT_RECORDER_USING_FLASHDB */
     }
     UNLOCK();
 

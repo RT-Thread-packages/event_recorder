@@ -6,6 +6,6 @@ cwd     = GetCurrentDir()
 src     = Glob('*.c')
 path    = [cwd]
 
-group = DefineGroup('event_recorder', src, depend = [''], CPPPATH = path)
+group = DefineGroup('event_recorder', src, depend = ['PKG_USING_EVENT_RECORDER'], CPPPATH = path)
 
 Return('group')
