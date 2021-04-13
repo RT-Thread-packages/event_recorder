@@ -13,8 +13,11 @@
 
 #ifdef RT_USING_UTEST
 #include <utest.h>
+#if !defined(_MSC_VER)
 #include <sys/unistd.h>
+#endif
 
+#include <dfs_posix.h>
 #ifndef RT_USING_POSIX
 #error "please enable the RT_USING_POSIX"
 #endif
