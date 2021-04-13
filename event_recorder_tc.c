@@ -15,12 +15,12 @@
 #include <utest.h>
 #if !defined(_MSC_VER)
 #include <sys/unistd.h>
-#endif
-
-#include <dfs_posix.h>
 #ifndef RT_USING_POSIX
 #error "please enable the RT_USING_POSIX"
 #endif
+#endif
+
+#include <dfs_posix.h>
 
 #define RECORD_DIR  "/logs/event_recorder_test/"
 #define RECORD_NAME "testcase"
