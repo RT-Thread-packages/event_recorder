@@ -38,7 +38,7 @@ static size_t replay_count = 0;
 static rt_tick_t replay_last_tick = 0;
 static rt_sem_t replay_stop_notice;
 
-static void replay(uint8_t id, const uint8_t *value, size_t value_len)
+static int replay(uint8_t id, const uint8_t *value, size_t value_len)
 {
     uint32_t count = *((uint32_t *) value);
     rt_tick_t interval = 0;
@@ -66,6 +66,8 @@ static void replay(uint8_t id, const uint8_t *value, size_t value_len)
     {
         rt_sem_release(replay_stop_notice);
     }
+
+    return 0;
 }
 
 static void test_event_recorder_init(void)

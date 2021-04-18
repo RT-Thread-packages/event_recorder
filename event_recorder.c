@@ -16,18 +16,10 @@
 #define LOG_LVL DBG_LOG
 #include <rtdbg.h>
 
-#ifndef EVENT_SOURCE_MAX_NUM
-#define EVENT_SOURCE_MAX_NUM 4
-#endif
-
-#ifndef EVENT_VALUE_MAX_SIZE
-#define EVENT_VALUE_MAX_SIZE 16
-#endif
-
 struct event_source {
     uint8_t id;
     const char *name;
-    void (*replay)(uint8_t id, const uint8_t *value, size_t value_len);
+    int (*replay)(uint8_t id, const uint8_t *value, size_t value_len);
 };
 
 struct er_event {
@@ -151,7 +143,7 @@ int event_recorder_stop(void)
 }
 
 int event_source_register(uint8_t id, const char *name,
-        void (*replay)(uint8_t id, const uint8_t *value, size_t value_len))
+        int (*replay)(uint8_t id, const uint8_t *value, size_t value_len))
 {
     off_t i, empty_index = -1;
     int result = -1;
@@ -233,6 +225,7 @@ int event_source_trigger(uint8_t event_id, uint8_t *event_value, size_t value_le
 
 static bool query_cb(fdb_tsl_t tsl, void *arg)
 {
+    int *result = (int *)arg;
     struct fdb_blob blob;
     off_t i;
 
@@ -250,8 +243,13 @@ static bool query_cb(fdb_tsl_t tsl, void *arg)
             /* check the same source */
             if (source_tabel[i].id == event.content.element.id)
             {
-                source_tabel[i].replay(event.content.element.id, event.content.element.value,
-                        event.content.element.value_len);
+                if (source_tabel[i].replay(event.content.element.id, event.content.element.value,
+                        event.content.element.value_len) < 0)
+                {
+                    LOG_W("Event source %s replay failed. Now will STOP replay.", source_tabel[i].name);
+                    *result = -1;
+                    return true;
+                }
                 break;
             }
         }
@@ -265,9 +263,13 @@ static bool query_cb(fdb_tsl_t tsl, void *arg)
 
 static void replay_entry(void *parameter)
 {
-    while (rt_tick_get() - repaly_start <= replay_setting_duration && is_replaing)
+    int result = 0, count = 0;
+
+    repaly_start = rt_tick_get();
+    while (rt_tick_get() - repaly_start <= replay_setting_duration && is_replaing && result >= 0)
     {
-        fdb_tsl_iter(&tsdb, query_cb, NULL);
+        LOG_I("Replay count is [%d].", ++count);
+        fdb_tsl_iter(&tsdb, query_cb, &result);
     }
     event_replay_stop();
 }
@@ -327,7 +329,6 @@ int event_replay_stop(void)
     {
         is_replaing = false;
         replay_setting_duration = 0;
-        repaly_start = 0;
         /* close database */
         fdb_tsdb_deinit(&tsdb);
     }
