@@ -13,7 +13,7 @@
 #include <rtthread.h>
 
 #define LOG_TAG "event_recorder"
-#define LOG_LVL DBG_LOG
+#define LOG_LVL DBG_INFO
 #include <rtdbg.h>
 
 struct event_source {
@@ -44,7 +44,7 @@ static rt_tick_t last_trigger_tick = 0, repaly_start = 0, replay_setting_duratio
 /* TSDB object */
 struct fdb_tsdb tsdb = { 0 };
 #define TSDB_TSL_LEN    1024
-#define TSDB_SEC        4096
+#define TSDB_SEC        32768
 #define TSDB_SIZE       (TSDB_SEC * 4)
 #endif /* EVENT_RECORDER_USING_FLASHDB */
 
@@ -78,18 +78,19 @@ static fdb_time_t get_time(void)
 #ifdef EVENT_RECORDER_USING_FLASHDB
 static int open_tsdb(const char *dir, const char *name)
 {
-    bool file_mode = true;
+    bool file_mode = true, rollver = false;
     uint32_t tsdb_len = TSDB_TSL_LEN;
     uint32_t tsdb_sec = TSDB_SEC, tsdb_size = TSDB_SIZE;
 
-    fdb_tsdb_control(&tsdb, FDB_KVDB_CTRL_SET_SEC_SIZE, &tsdb_sec);
-    fdb_tsdb_control(&tsdb, FDB_KVDB_CTRL_SET_FILE_MODE, &file_mode);
-    fdb_tsdb_control(&tsdb, FDB_KVDB_CTRL_SET_MAX_SIZE, &tsdb_size);
+    fdb_tsdb_control(&tsdb, FDB_TSDB_CTRL_SET_SEC_SIZE, &tsdb_sec);
+    fdb_tsdb_control(&tsdb, FDB_TSDB_CTRL_SET_FILE_MODE, &file_mode);
+    fdb_tsdb_control(&tsdb, FDB_TSDB_CTRL_SET_MAX_SIZE, &tsdb_size);
     if (fdb_tsdb_init(&tsdb, name, dir, get_time, tsdb_len, NULL) != FDB_NO_ERR)
     {
         LOG_E("tsdb(%s:%s) create failed", dir, name);
         return -1;
     }
+    fdb_tsdb_control(&tsdb, FDB_TSDB_CTRL_SET_ROLLOVER, &rollver);
     return 0;
 }
 #endif /* EVENT_RECORDER_USING_FLASHDB */
@@ -198,6 +199,7 @@ int event_source_trigger(uint8_t event_id, uint8_t *event_value, size_t value_le
         struct er_event event;
         struct fdb_blob blob;
         rt_tick_t interval = 0;
+        fdb_err_t result = FDB_NO_ERR;
         /* calculate the interval from last record */
         rt_tick_t cur_tick = rt_tick_get();
         if (last_trigger_tick == 0) {
@@ -215,8 +217,17 @@ int event_source_trigger(uint8_t event_id, uint8_t *event_value, size_t value_le
         }
         event.content.element.value_len = value_len;
         memcpy(event.content.element.value, event_value, value_len);
+        LOG_D("Record an event (%d), len %d", event_id, value_len);
         /* append the new record */
-        fdb_tsl_append(&tsdb, fdb_blob_make(&blob, event.content.raw, sizeof(event.content.raw)));
+        result = fdb_tsl_append(&tsdb, fdb_blob_make(&blob, event.content.raw, sizeof(event.content.raw)));
+        if (result == FDB_SAVED_FULL)
+        {
+            LOG_E("Record log is FULL, please increase the TSDB max size.");
+        }
+        else if (result != FDB_NO_ERR)
+        {
+            LOG_E("Record log append failed(%d).", result);
+        }
     }
     UNLOCK();
 
@@ -243,6 +254,7 @@ static bool query_cb(fdb_tsl_t tsl, void *arg)
             /* check the same source */
             if (source_tabel[i].id == event.content.element.id)
             {
+                LOG_D("Replay an event (%d), len %d", event.content.element.id, event.content.element.value_len);
                 if (source_tabel[i].replay(event.content.element.id, event.content.element.value,
                         event.content.element.value_len) < 0)
                 {
